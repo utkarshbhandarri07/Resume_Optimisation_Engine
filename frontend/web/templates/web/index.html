@@ -1,0 +1,15 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Optimizer</title>
+  <link rel="stylesheet" href="{% static 'web/styles.css' %}">
+</head>
+<body>
+  <main id="app" aria-live="polite"></main>
+  <script>window.RESUME_API_BASE = "{{ resume_api_url|escapejs }}";</script>
+  <script src="{% static 'web/app.js' %}" defer></script>
+</body>
+</html>

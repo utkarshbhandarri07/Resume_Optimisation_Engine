@@ -1,0 +1,43 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.wallet
+**/wallet/
+passwordforwallet.txt
+Wallet_Project1.zip
+
+# Python environments, caches, and test output
+venv/
+.venv/
+**/venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# JavaScript and Django build output
+node_modules/
+**/node_modules/
+dist/
+build/
+staticfiles/
+**/staticfiles/
+.uv-cache/
+**/.uv-cache/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
