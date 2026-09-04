@@ -1,0 +1,4 @@
+# Install on the production VM as /etc/cron.d/resume-optimizer-deploy.
+# The VM remains in UTC; CRON_TZ makes this run at 00:00 Asia/Kolkata (IST).
+CRON_TZ=Asia/Kolkata
+0 0 * * * root /opt/resume-optimizer/app/ops/deploy.sh
