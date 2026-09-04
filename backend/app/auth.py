@@ -59,7 +59,11 @@ def verify_otp(email: str, code: str) -> str:
                 cur.execute("SELECT id,otp_hash,expires_at,attempts FROM (SELECT id,otp_hash,expires_at,attempts FROM ro_otp_requests WHERE email=:email ORDER BY created_at DESC) WHERE ROWNUM=1", {"email":email}); row=cur.fetchone()
                 if not row: raise HTTPException(401, "Invalid or expired verification code")
                 cur.execute("UPDATE ro_otp_requests SET attempts=attempts+1 WHERE id=:id", {"id":row[0]}); con.commit()
-                if row[3] >= 5 or row[2] < datetime.now(timezone.utc) or not secrets.compare_digest(row[1], hashlib.sha256(code.encode()).hexdigest()): raise HTTPException(401, "Invalid or expired verification code")
+                expires_at = row[2]
+                # Oracle may materialize a TIMESTAMP WITH TIME ZONE as naive.
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                if row[3] >= 5 or expires_at < datetime.now(timezone.utc) or not secrets.compare_digest(row[1], hashlib.sha256(code.encode()).hexdigest()): raise HTTPException(401, "Invalid or expired verification code")
                 cur.execute("SELECT id,display_name FROM ro_users WHERE email=:email", {"email":email}); existing=cur.fetchone()
                 if existing: name=existing[1]
                 else:
