@@ -23,9 +23,19 @@
     if (token()) headers.set("Authorization", `Bearer ${token()}`);
     const response = await fetch(`${API}${path}`, {...options, headers});
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
+      // Reverse proxies can return an HTML error page (not JSON) when a long
+      // Gemini/PDF request exceeds their timeout. Keep its useful text and
+      // turn a 504 into an actionable message instead of "Request failed.".
+      const body = await response.text().catch(() => "");
+      let data = {};
+      try { data = body ? JSON.parse(body) : {}; } catch { data = {detail: body}; }
       const wait = response.headers.get("Retry-After") || data.retry_after;
-      const detail = typeof data.detail === "string" ? data.detail : (data.detail?.message || "Request failed.");
+      const fallback = response.status === 504
+        ? "The optimization took longer than expected. Your uploaded resume and job description are preserved; wait a moment and refresh the session before trying again."
+        : "Request failed.";
+      const detail = typeof data.detail === "string" && data.detail.trim()
+        ? data.detail
+        : (data.detail?.message || fallback);
       const error = new Error(`${detail}${response.status===429 && wait ? ` Please wait ${wait} seconds.` : ""}`);
       error.payload=data; error.status=response.status; throw error;
     }
