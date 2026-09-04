@@ -12,7 +12,14 @@ def create_session(user, state, source_bytes, filename):
         with pool.acquire() as con:
             with con.cursor() as cur:
                 cur.execute("MERGE INTO ro_users u USING (SELECT :email email FROM dual) x ON (u.email=x.email) WHEN NOT MATCHED THEN INSERT (id,email,display_name) VALUES (:id,:email,:name)", {"id":str(uuid4()),"email":user,"name":user})
-                cur.execute("INSERT INTO ro_sessions (id,user_id,jd,state_json,status,evaluator_model,writer_model) SELECT :sid,id,:jd,:state,:status,:eval,:writer FROM ro_users WHERE email=:email", {"sid":sid,"email":user,"jd":state["jd"],"state":_safe(state),"status":state.get("status","processing"),"eval":"gemini-3.7-flash","writer":state.get("selected_writer_model","gemini-3.6-flash")})
+            # Autonomous Database can reject a read-after-write on the same
+            # table in a parallel DML transaction (ORA-12839). Finalize the
+            # idempotent user upsert before resolving its stable user ID.
+            con.commit()
+            with con.cursor() as cur:
+                cur.execute("SELECT id FROM ro_users WHERE email=:email", {"email":user})
+                user_id = cur.fetchone()[0]
+                cur.execute("INSERT INTO ro_sessions (id,user_id,jd,state_json,status,evaluator_model,writer_model) VALUES (:sid,:user_id,:jd,:state,:status,:eval,:writer)", {"sid":sid,"user_id":user_id,"jd":state["jd"],"state":_safe(state),"status":state.get("status","processing"),"eval":"gemini-3.7-flash","writer":state.get("selected_writer_model","gemini-3.6-flash")})
                 cur.execute("INSERT INTO ro_documents (id,session_id,kind,filename,mime_type,content) VALUES (:id,:sid,'SOURCE',:filename,:mime,:content)", {"id":str(uuid4()),"sid":sid,"filename":filename,"mime":"application/octet-stream","content":source_bytes})
             con.commit()
     return sid
