@@ -21,6 +21,7 @@ class DailyDateFileHandler(logging.Handler):
             path = self.log_dir / f"resume-optimizer-{day}.log"
             with path.open("a", encoding="utf-8") as stream:
                 stream.write(f"{self.format(record)}\n")
+            path.chmod(0o640)
         except Exception:
             self.handleError(record)
 
