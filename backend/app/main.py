@@ -16,6 +16,7 @@ from .oracle import get_pool
 from .ats_scorer import score_experience
 from .rate_limit import SlidingWindowRateLimiter
 from .logging_config import configure_application_logging
+from .llm import ModelTemporarilyUnavailable
 
 app=FastAPI(title="Resume Optimization Agent",version="2.0.0"); settings=get_settings(); logger=configure_application_logging(settings.log_dir,settings.log_level); app.add_middleware(CORSMiddleware,allow_origins=settings.allowed_origins,allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 rate_limiter=SlidingWindowRateLimiter(settings.rate_limit_requests,settings.rate_limit_window_seconds)
@@ -73,6 +74,9 @@ async def create(jd:str=Form(...),resume:UploadFile=File(...),writer_model:str=F
     state={"original_resume":original,"current_resume":original,"jd":jd,"original_experience":experience,"resume_sections":sections,"iteration_count":0,"is_satisfied":False,"status":"evaluating","selected_writer_model":writer_model,"evaluator_model":"gemini-3.7-flash","ats_score_original":score_experience(original,jd)["score"]}
     sid=create_session(user,state,data,resume.filename or "resume.pdf")
     try: result=build_graph(gemini_api_key,writer_model).invoke(state,config={"configurable":{"thread_id":sid}})
+    except ModelTemporarilyUnavailable as exc:
+        logger.warning("session_initial_evaluation_deferred session_id=%s model=%s", sid, writer_model)
+        raise HTTPException(503, str(exc), headers={"Retry-After":"30"})
     except RuntimeError as exc:
         logger.exception("session_initial_evaluation_failed session_id=%s model=%s", sid, writer_model)
         raise HTTPException(503,str(exc))
@@ -90,6 +94,9 @@ def decision(sid:str,payload:ReviewRequest,user:str=Depends(current_user),gemini
     if not item: raise HTTPException(404,"Session not found")
     if payload.action=="feedback" and not payload.feedback.strip(): raise HTTPException(400,"Feedback is required")
     try: result=build_graph(gemini_api_key,item["state"].get("selected_writer_model","gemini-3.6-flash")).invoke(Command(resume=payload.model_dump()),config={"configurable":{"thread_id":sid}})
+    except ModelTemporarilyUnavailable as exc:
+        logger.warning("session_decision_deferred session_id=%s action=%s", sid, payload.action)
+        raise HTTPException(503, str(exc), headers={"Retry-After":"30"})
     except Exception as exc:
         logger.exception("session_decision_failed session_id=%s action=%s", sid, payload.action)
         raise HTTPException(502,f"Session could not continue: {exc}")

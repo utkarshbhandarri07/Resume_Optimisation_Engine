@@ -4,11 +4,18 @@ import oracledb
 from .config import get_settings
 from langgraph.checkpoint.memory import MemorySaver
 
+
+def _configure_session(connection: oracledb.Connection, _requested_tag: str | None) -> None:
+    """Prevent Autonomous Database parallel-DML conflicts in checkpoint writes."""
+    with connection.cursor() as cursor:
+        cursor.execute("ALTER SESSION DISABLE PARALLEL DML")
+
+
 def create_pool():
     s = get_settings()
     if not all((s.oracle_user, s.oracle_password, s.oracle_dsn)):
         return None
-    kwargs = {"user": s.oracle_user, "password": s.oracle_password, "dsn": s.oracle_dsn, "min": 1, "max": 4}
+    kwargs = {"user": s.oracle_user, "password": s.oracle_password, "dsn": s.oracle_dsn, "min": 1, "max": 4, "session_callback": _configure_session}
     if s.oracle_wallet_dir:
         # Autonomous Database aliases such as ``project1_medium`` live in the
         # wallet's tnsnames.ora, so the driver needs this as its config_dir too.
