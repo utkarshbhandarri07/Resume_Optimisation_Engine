@@ -9,7 +9,7 @@ from .config import get_settings
 from .models import OtpRequest, OtpVerify, ReviewRequest
 from .auth import send_otp, verify_otp, current_user
 from .resume_parser import parse_resume
-from .graph import build_graph, WRITER_MODELS
+from .graph import build_graph, EVALUATOR_MODELS, WRITER_MODELS
 from .store import create_session, get_session, save_session, save_pdf, list_sessions
 from .pdf_generator import build_resume_pdf
 from .oracle import get_pool
@@ -65,20 +65,21 @@ def request_otp(payload:OtpRequest):
 @app.post("/api/auth/verify-otp")
 def verify(payload:OtpVerify): return {"access_token":verify_otp(str(payload.email),payload.otp),"token_type":"bearer"}
 @app.post("/api/sessions")
-async def create(jd:str=Form(...),resume:UploadFile=File(...),writer_model:str=Form("gemini-3.6-flash"),user:str=Depends(current_user),gemini_api_key:str|None=Header(default=None,alias="X-Gemini-API-Key")):
+async def create(jd:str=Form(...),resume:UploadFile=File(...),writer_model:str=Form("gemini-3.6-flash"),evaluator_model:str=Form("gemini-3.7-flash"),user:str=Depends(current_user),gemini_api_key:str|None=Header(default=None,alias="X-Gemini-API-Key")):
     if writer_model not in WRITER_MODELS: raise HTTPException(400,"Unsupported generation model")
+    if evaluator_model not in EVALUATOR_MODELS: raise HTTPException(400,"Unsupported evaluator model")
     data=await resume.read()
     if len(data)>settings.max_upload_mb*1024*1024: raise HTTPException(413,"Resume is too large")
     try: original,experience,sections=parse_resume(data,resume.filename or "resume.pdf")
     except ValueError as exc: raise HTTPException(400,str(exc))
-    state={"original_resume":original,"current_resume":original,"jd":jd,"original_experience":experience,"resume_sections":sections,"iteration_count":0,"is_satisfied":False,"status":"evaluating","selected_writer_model":writer_model,"evaluator_model":"gemini-3.7-flash","ats_score_original":score_experience(original,jd)["score"]}
+    state={"original_resume":original,"current_resume":original,"jd":jd,"original_experience":experience,"resume_sections":sections,"iteration_count":0,"is_satisfied":False,"status":"evaluating","selected_writer_model":writer_model,"evaluator_model":evaluator_model,"ats_score_original":score_experience(original,jd)["score"]}
     sid=create_session(user,state,data,resume.filename or "resume.pdf")
     try: result=build_graph(gemini_api_key,writer_model).invoke(state,config={"configurable":{"thread_id":sid}})
     except ModelTemporarilyUnavailable as exc:
-        logger.warning("session_initial_evaluation_deferred session_id=%s model=%s", sid, writer_model)
+        logger.warning("session_initial_evaluation_deferred session_id=%s evaluator_model=%s", sid, evaluator_model)
         raise HTTPException(503, str(exc), headers={"Retry-After":"30"})
     except RuntimeError as exc:
-        logger.exception("session_initial_evaluation_failed session_id=%s model=%s", sid, writer_model)
+        logger.exception("session_initial_evaluation_failed session_id=%s evaluator_model=%s", sid, evaluator_model)
         raise HTTPException(503,str(exc))
     save_session(sid,result); item=get_session(sid,user); return public(item)
 @app.get("/api/sessions")

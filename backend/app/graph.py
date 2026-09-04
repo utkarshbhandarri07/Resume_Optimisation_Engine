@@ -7,6 +7,7 @@ from .config import get_settings
 from .oracle import get_checkpointer
 
 MODEL_CHOICES = ("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
+EVALUATOR_MODELS = set(MODEL_CHOICES)
 WRITER_MODELS = set(MODEL_CHOICES[1:])
 
 

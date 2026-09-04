@@ -19,7 +19,7 @@ def create_session(user, state, source_bytes, filename):
             with con.cursor() as cur:
                 cur.execute("SELECT id FROM ro_users WHERE email=:email", {"email":user})
                 user_id = cur.fetchone()[0]
-                cur.execute("INSERT INTO ro_sessions (id,user_id,jd,state_json,status,evaluator_model,writer_model) VALUES (:sid,:user_id,:jd,:state,:status,:eval,:writer)", {"sid":sid,"user_id":user_id,"jd":state["jd"],"state":_safe(state),"status":state.get("status","processing"),"eval":"gemini-3.7-flash","writer":state.get("selected_writer_model","gemini-3.6-flash")})
+                cur.execute("INSERT INTO ro_sessions (id,user_id,jd,state_json,status,evaluator_model,writer_model) VALUES (:sid,:user_id,:jd,:state,:status,:eval,:writer)", {"sid":sid,"user_id":user_id,"jd":state["jd"],"state":_safe(state),"status":state.get("status","processing"),"eval":state.get("evaluator_model","gemini-3.7-flash"),"writer":state.get("selected_writer_model","gemini-3.6-flash")})
                 cur.execute("INSERT INTO ro_documents (id,session_id,kind,filename,mime_type,content) VALUES (:id,:sid,'SOURCE',:filename,:mime,:content)", {"id":str(uuid4()),"sid":sid,"filename":filename,"mime":"application/octet-stream","content":source_bytes})
             con.commit()
     return sid
@@ -40,7 +40,7 @@ def save_session(sid,state):
     if pool:
         with pool.acquire() as con:
             with con.cursor() as cur:
-                cur.execute("UPDATE ro_sessions SET state_json=:state,status=:status,updated_at=SYSTIMESTAMP WHERE id=:sid", {"state":_safe(state),"status":state.get("status","processing"),"sid":sid})
+                cur.execute("UPDATE ro_sessions SET state_json=:state,status=:status,evaluator_model=:eval,writer_model=:writer,updated_at=SYSTIMESTAMP WHERE id=:sid", {"state":_safe(state),"status":state.get("status","processing"),"eval":state.get("evaluator_model","gemini-3.7-flash"),"writer":state.get("selected_writer_model","gemini-3.6-flash"),"sid":sid})
                 version_id=str(uuid4())
                 cur.execute("INSERT INTO ro_resume_versions (id,session_id,version_no,sections_json,resume_text,ats_score,ats_breakdown_json,evaluator_score,grounding_valid) VALUES (:id,:sid,(SELECT NVL(MAX(version_no),0)+1 FROM ro_resume_versions WHERE session_id=:sid),:sections,:text,:ats,:breakdown,:eval,:grounding)", {"id":version_id,"sid":sid,"sections":json.dumps(state.get("resume_sections",[]),default=str),"text":state.get("current_resume",""),"ats":state.get("ats_score_rewritten") or state.get("ats_score_original"),"breakdown":json.dumps({"original":state.get("ats_explanation_original"),"rewritten":state.get("ats_explanation_rewritten")}),"eval":(state.get("evaluation") or {}).get("overall_score"),"grounding":"Y" if state.get("grounding_valid",True) else "N"})
                 ev=state.get("evaluation")
