@@ -97,6 +97,19 @@ def validate_template_data(candidate: object, source: dict) -> dict:
         role["bullets"] = [_clean(item) for item in role["bullets"] if _clean(item)]
         if len(role["bullets"]) != len(baseline["bullets"]): raise ResumeLayoutError("Generation model returned an empty experience bullet.")
     if not isinstance(data["skills"], list) or not isinstance(data["education"], list) or not isinstance(data["certifications"], list): raise ResumeLayoutError("Generation model returned invalid template arrays.")
+    normalized_skills = []
+    for row in data["skills"]:
+        if isinstance(row, str):
+            normalized_skills.append({"label": "Skills", "items": [_clean(row)]})
+        elif isinstance(row, dict) and _clean(row.get("label")) and isinstance(row.get("items"), list):
+            normalized_skills.append({"label": _clean(row["label"]), "items": [_clean(item) for item in row["items"] if _clean(item)]})
+        else:
+            raise ResumeLayoutError("Generation model returned an invalid skill group.")
+    data["skills"] = normalized_skills
+    # Education and certifications are protected facts. Retain the parsed source
+    # structure even when a model returns shorthand strings for these sections.
+    data["education"] = deepcopy(source["education"])
+    data["certifications"] = deepcopy(source["certifications"])
     data["header"] = deepcopy(source["header"])
     data["summary"] = _clean(data["summary"])
     if not data["summary"]: raise ResumeLayoutError("Generation model returned an empty summary.")
