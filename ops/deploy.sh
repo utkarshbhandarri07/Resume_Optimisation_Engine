@@ -53,6 +53,12 @@ echo "$(date -Is) deploying ${CURRENT_REVISION:0:12} -> ${REMOTE_REVISION:0:12}"
 systemctl stop "$WEB_SERVICE" "$API_SERVICE"
 runuser -u "$APP_USER" -- git -C "$APP_ROOT" pull --ff-only origin main
 bash "$APP_ROOT/ops/install-resume-pdf-tools.sh"
+# Fetch Tectonic's required template packages during deployment. This prevents a
+# user's first Improve request from timing out while its cache is initialized.
+warm_dir="$(mktemp -d)"
+trap 'rm -rf "$warm_dir"; recover_services' ERR
+runuser -u "$APP_USER" -- /usr/local/bin/tectonic -X compile --outdir "$warm_dir" "$APP_ROOT/ops/tectonic-smoke.tex"
+rm -rf "$warm_dir"
 
 # Requirements may change with a deployment. Reinstalling from the pinned
 # project requirements is idempotent and keeps both runtimes in sync.

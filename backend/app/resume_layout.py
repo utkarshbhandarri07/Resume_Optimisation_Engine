@@ -146,7 +146,10 @@ def render_pdf(data: dict, target_page_count: int) -> bytes:
     tex = template.substitute(name=_latex(data["header"].get("name", "")), headline=_latex(data["header"].get("headline", "")), contact=_latex(data["header"].get("contact", "")), body=_body(data))
     with tempfile.TemporaryDirectory(prefix="resume-latex-") as directory:
         work = Path(directory); source = work / "resume.tex"; source.write_text(tex, encoding="utf-8")
-        result = subprocess.run([executable, "-X", "compile", "--outdir", str(work), str(source)], capture_output=True, text=True, timeout=60, check=False)
+        try:
+            result = subprocess.run([executable, "-X", "compile", "--outdir", str(work), str(source)], capture_output=True, text=True, timeout=120, check=False)
+        except subprocess.TimeoutExpired as exc:
+            raise ResumeLayoutError("LaTeX rendering timed out while preparing its template libraries. Your session is preserved; retry shortly.") from exc
         output = work / "resume.pdf"
         if result.returncode or not output.exists(): raise ResumeLayoutError("LaTeX could not render this resume template.")
         pdf = output.read_bytes(); pages = len(PdfReader(BytesIO(pdf)).pages)
