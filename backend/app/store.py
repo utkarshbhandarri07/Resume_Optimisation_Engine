@@ -33,7 +33,11 @@ def get_session(sid,user):
             cur.execute("SELECT s.state_json,src.content,src.filename,gen.content FROM ro_sessions s JOIN ro_users u ON u.id=s.user_id LEFT JOIN ro_documents src ON src.session_id=s.id AND src.kind='SOURCE' LEFT JOIN ro_documents gen ON gen.session_id=s.id AND gen.kind='GENERATED' WHERE s.id=:sid AND u.email=:email", {"sid":sid,"email":user})
             row=cur.fetchone()
     if not row:return None
-    state=json.loads(row[0].read() if hasattr(row[0],"read") else row[0]); item={"id":sid,"user":user,"state":state,"source":row[1].read() if hasattr(row[1],"read") else row[1],"filename":row[2],"pdf":row[3].read() if hasattr(row[3],"read") else row[3]}; _sessions[sid]=item; return item
+    raw_state = row[0].read() if hasattr(row[0], "read") else row[0]
+    # Oracle JSON columns can be returned either as serialized text or as an
+    # already-decoded dictionary, depending on the driver/session settings.
+    state = raw_state if isinstance(raw_state, dict) else json.loads(raw_state)
+    item={"id":sid,"user":user,"state":state,"source":row[1].read() if hasattr(row[1],"read") else row[1],"filename":row[2],"pdf":row[3].read() if hasattr(row[3],"read") else row[3]}; _sessions[sid]=item; return item
 def save_session(sid,state):
     if sid in _sessions:_sessions[sid]["state"]=state
     pool=get_pool()
