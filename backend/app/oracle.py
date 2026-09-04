@@ -10,7 +10,9 @@ def create_pool():
         return None
     kwargs = {"user": s.oracle_user, "password": s.oracle_password, "dsn": s.oracle_dsn, "min": 1, "max": 4}
     if s.oracle_wallet_dir:
-        kwargs.update(wallet_location=s.oracle_wallet_dir, wallet_password=s.oracle_wallet_password or None)
+        # Autonomous Database aliases such as ``project1_medium`` live in the
+        # wallet's tnsnames.ora, so the driver needs this as its config_dir too.
+        kwargs.update(config_dir=s.oracle_wallet_dir, wallet_location=s.oracle_wallet_dir, wallet_password=s.oracle_wallet_password or None)
     return oracledb.create_pool(**kwargs)
 
 _pool = None

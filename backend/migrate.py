@@ -7,7 +7,7 @@ def main():
     s=get_settings()
     if not all((s.oracle_user,s.oracle_password,s.oracle_dsn)): raise SystemExit("Set ORACLE_USER, ORACLE_PASSWORD, and ORACLE_DSN in backend/.env")
     kwargs={"user":s.oracle_user,"password":s.oracle_password,"dsn":s.oracle_dsn}
-    if s.oracle_wallet_dir: kwargs.update(wallet_location=s.oracle_wallet_dir,wallet_password=s.oracle_wallet_password or None)
+    if s.oracle_wallet_dir: kwargs.update(config_dir=s.oracle_wallet_dir,wallet_location=s.oracle_wallet_dir,wallet_password=s.oracle_wallet_password or None)
     with oracledb.connect(**kwargs) as con:
         with con.cursor() as cur:
             cur.execute("BEGIN EXECUTE IMMEDIATE 'CREATE TABLE ro_migrations (version VARCHAR2(40) PRIMARY KEY, applied_at TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL)'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;")
