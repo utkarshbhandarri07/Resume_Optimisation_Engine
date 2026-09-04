@@ -32,11 +32,17 @@ class ResumeState(TypedDict, total=False):
     best_ats_score: int
     comparison: dict[str, Any]
     repair_attempted: bool
+    evaluator_model: str
+    model_error: str
+    model_error_target: str
+    model_retry_node: str
+    available_models: list[str]
 
 class ReviewRequest(BaseModel):
-    action: str = Field(pattern=r"^(improve|feedback|accept)$")
+    action: str = Field(pattern=r"^(improve|feedback|accept|retry_model)$")
     feedback: str = Field(default="", max_length=5000)
     approved_improvement_ids: list[str] = Field(default_factory=list)
+    model: str = Field(default="", max_length=80)
 
 class OtpRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)

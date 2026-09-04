@@ -23,9 +23,31 @@
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       const wait = response.headers.get("Retry-After") || data.retry_after;
-      throw new Error(`${data.detail || "Request failed."}${response.status===429 && wait ? ` Please wait ${wait} seconds.` : ""}`);
+      const detail = typeof data.detail === "string" ? data.detail : (data.detail?.message || "Request failed.");
+      const error = new Error(`${detail}${response.status===429 && wait ? ` Please wait ${wait} seconds.` : ""}`);
+      error.payload=data; error.status=response.status; throw error;
     }
     return response;
+  }
+
+  function showErrorDialog(text) {
+    const dialog=document.createElement("dialog"); dialog.className="error-dialog";
+    dialog.innerHTML=`<section class="settings-card"><button class="close" aria-label="Close">×</button><p class="eyebrow">REQUEST ISSUE</p><h2>We could not complete that request</h2><p>${escapeHtml(text)}</p><button class="secondary" id="dismiss-error">Close</button></section>`;
+    document.body.append(dialog); dialog.showModal(); const close=()=>{dialog.close();dialog.remove();}; dialog.querySelector(".close").onclick=close; dialog.querySelector("#dismiss-error").onclick=close;
+  }
+
+  function renderSession(session) {
+    cacheSession(session);
+    if(session.status==="model_selection_required"){renderUpload("Evaluation is paused until you choose a model.");showModelSelection(session);return;}
+    renderReview(session);
+  }
+
+  function showModelSelection(session) {
+    const models=session.available_models?.length?session.available_models:["gemini-3.7-flash",...MODELS], target=session.model_error_target==="writer"?"generation":"evaluation", current=target==="evaluation"?(session.evaluator_model||models[0]):(session.selected_writer_model||read(KEYS.model)||MODELS[0]);
+    const dialog=document.createElement("dialog"); dialog.className="model-dialog";
+    dialog.innerHTML=`<section class="settings-card"><p class="eyebrow">MODEL RETRY REQUIRED</p><h2>${target === "evaluation" ? "Evaluator" : "Generation"} model needs attention</h2><p>${escapeHtml(session.model_error||"The selected Gemini model could not complete this request.")}</p><label>Try another available model<select id="retry-model">${models.map(model=>`<option ${model===current?"selected":""}>${escapeHtml(model)}</option>`).join("")}</select></label><p class="muted">Your uploaded resume and LangGraph session are preserved.</p><button id="retry-model-button">Retry with selected model</button><p id="model-retry-status" class="error"></p></section>`;
+    document.body.append(dialog); dialog.showModal();
+    dialog.querySelector("#retry-model-button").addEventListener("click",async()=>{const button=dialog.querySelector("#retry-model-button"),status=dialog.querySelector("#model-retry-status"),model=dialog.querySelector("#retry-model").value,key=read(KEYS.gemini);if(!key){status.textContent="Add your Gemini API key in Settings before retrying.";return;}try{button.disabled=true;status.textContent="Retrying the paused LangGraph step…";const updated=await (await api(`/sessions/${session.session_id}/decision`,{method:"POST",headers:{"Content-Type":"application/json","X-Gemini-API-Key":key},body:JSON.stringify({action:"retry_model",model})})).json();dialog.close();dialog.remove();renderSession(updated);}catch(err){status.textContent=err.message;showErrorDialog(err.message);}finally{button.disabled=false;}});
   }
 
   const header = () => `<header><a class="brand" href="#">Resume Optimizer</a><div class="profile"><button id="profile-button">Profile ▾</button><div id="profile-menu" class="menu hidden"><button id="new-session">New session</button><button id="open-settings">Settings</button><button id="logout">Logout</button></div></div></header>`;
@@ -58,7 +80,7 @@
     document.getElementById("evaluate").addEventListener("click",async()=>{
       const file=document.getElementById("resume-file").files[0],jd=document.getElementById("job-description").value.trim(),key=document.getElementById("gemini-key").value.trim(),model=document.getElementById("writer-model").value;
       if(!file||jd.length<30||!key)return renderUpload("Add a PDF/DOCX, a complete job description, and your Gemini API key.");
-      try{disableButtons(true);write(KEYS.gemini,key);write(KEYS.model,model);const form=new FormData();form.append("resume",file);form.append("jd",jd);form.append("writer_model",model);const session=await (await api("/sessions",{method:"POST",headers:{"X-Gemini-API-Key":key},body:form})).json();cacheSession(session);renderReview(session);}catch(err){renderUpload(err.message);}finally{disableButtons(false);}
+      try{disableButtons(true);write(KEYS.gemini,key);write(KEYS.model,model);const form=new FormData();form.append("resume",file);form.append("jd",jd);form.append("writer_model",model);const session=await (await api("/sessions",{method:"POST",headers:{"X-Gemini-API-Key":key},body:form})).json();renderSession(session);}catch(err){renderUpload(err.message);showErrorDialog(err.message);}finally{disableButtons(false);}
     });
   }
 
@@ -69,9 +91,9 @@
     const download=session.download_ready?"<button id='download'>Download optimized PDF</button>":"";
     app.innerHTML=`<section class="shell">${header()}${settings()}<section class="hero compact"><p class="eyebrow">EVALUATOR REVIEW</p><h1>${escapeHtml(evaluation.overall_score||0)}/100 fit score</h1><p>${escapeHtml(evaluation.executive_assessment||"Review the evaluator findings below.")}</p></section><section class="card"><h2>Key improvement points</h2>${issues}${session.feedback_error?message(session.feedback_error):""}<div class="actions"><button id="improve">Improve resume</button><button class="secondary" id="feedback">Give feedback</button><button class="secondary" id="accept">Accept</button>${download}</div>${message(status)}</section>${resume}</section>`;
     wireHeader();
-    const continueSession=async data=>{const key=read(KEYS.gemini);if(!key)throw new Error("Add your Gemini API key in Settings before continuing.");const updated=await (await api(`/sessions/${session.session_id}/decision`,{method:"POST",headers:{"Content-Type":"application/json","X-Gemini-API-Key":key},body:JSON.stringify(data)})).json();cacheSession(updated);renderReview(updated);};
-    document.getElementById("improve")?.addEventListener("click",async()=>{try{disableButtons(true);await continueSession({action:"improve",approved_improvement_ids:[...document.querySelectorAll(".issue input:checked")].map(input=>input.value)});}catch(err){renderReview(session,err.message);}finally{disableButtons(false);}});
-    document.getElementById("feedback")?.addEventListener("click",async()=>{const feedback=window.prompt("Enter feedback about the resume or job description:");if(!feedback?.trim())return;try{disableButtons(true);await continueSession({action:"feedback",feedback});}catch(err){renderReview(session,err.message);}finally{disableButtons(false);}});
+    const continueSession=async data=>{const key=read(KEYS.gemini);if(!key)throw new Error("Add your Gemini API key in Settings before continuing.");const updated=await (await api(`/sessions/${session.session_id}/decision`,{method:"POST",headers:{"Content-Type":"application/json","X-Gemini-API-Key":key},body:JSON.stringify(data)})).json();renderSession(updated);};
+    document.getElementById("improve")?.addEventListener("click",async()=>{try{disableButtons(true);await continueSession({action:"improve",approved_improvement_ids:[...document.querySelectorAll(".issue input:checked")].map(input=>input.value)});}catch(err){renderReview(session,err.message);showErrorDialog(err.message);}finally{disableButtons(false);}});
+    document.getElementById("feedback")?.addEventListener("click",async()=>{const feedback=window.prompt("Enter feedback about the resume or job description:");if(!feedback?.trim())return;try{disableButtons(true);await continueSession({action:"feedback",feedback});}catch(err){renderReview(session,err.message);showErrorDialog(err.message);}finally{disableButtons(false);}});
     document.getElementById("accept")?.addEventListener("click",async()=>{try{disableButtons(true);await continueSession({action:"accept"});}catch(err){renderReview(session,err.message);}finally{disableButtons(false);}});
     document.getElementById("download")?.addEventListener("click",async()=>{try{disableButtons(true);const response=await api(`/sessions/${session.session_id}/download`);const blob=await response.blob(),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="optimized-resume.pdf";link.click();URL.revokeObjectURL(link.href);}catch(err){renderReview(session,err.message);}finally{disableButtons(false);}});
   }
