@@ -11,7 +11,8 @@ WRITER_MODELS = set(MODEL_CHOICES[1:])
 
 
 def _model_pause(exc: ModelExecutionError, target: str, retry_node: str) -> dict:
-    return {"status":"model_selection_required", "model_error":str(exc), "model_error_target":target, "model_retry_node":retry_node, "available_models":list(MODEL_CHOICES)}
+    models = list(MODEL_CHOICES if target == "evaluator" else MODEL_CHOICES[1:])
+    return {"status":"model_selection_required", "model_error":str(exc), "model_error_target":target, "model_retry_node":retry_node, "available_models":models}
 
 def _build(api_key, writer_model):
     settings = get_settings(); writer_model = writer_model if writer_model in WRITER_MODELS else "gemini-3.6-flash"
@@ -44,7 +45,8 @@ def _build(api_key, writer_model):
         except ModelExecutionError as exc:
             return _model_pause(exc, "writer", "generate")
         sections = result.get("sections") if isinstance(result,dict) else None
-        if not sections: raise ValueError("Generation model must return a sections array")
+        if not isinstance(sections, list) or not sections or any(not isinstance(item, dict) or not str(item.get("heading", "")).strip() or not str(item.get("content", "")).strip() for item in sections):
+            return _model_pause(ModelExecutionError("The generation model returned an invalid resume format. Choose another generation model and retry."), "writer", "generate")
         text = "\n\n".join(f"{x.get('heading','')}\n{x.get('content','')}" for x in sections)
         return {"resume_sections":sections,"current_resume":text,"status":"validating"}
     def validate(state):
@@ -67,7 +69,8 @@ def _build(api_key, writer_model):
     def model_selection(state):
         selection = interrupt({"kind":"model_selection", "error":state.get("model_error","Model request failed."), "target":state.get("model_error_target","evaluator"), "models":state.get("available_models",list(MODEL_CHOICES))})
         model = selection.get("model", "") if isinstance(selection, dict) else ""
-        if model not in MODEL_CHOICES:
+        allowed = MODEL_CHOICES if state.get("model_error_target") == "evaluator" else MODEL_CHOICES[1:]
+        if model not in allowed:
             return Command(update={"model_error":"Choose one of the available Gemini models.","status":"model_selection_required"}, goto="model_selection")
         field = "evaluator_model" if state.get("model_error_target") == "evaluator" else "selected_writer_model"
         return Command(update={field:model,"model_error":"","status":"evaluating"}, goto=state.get("model_retry_node","initial_evaluate"))
