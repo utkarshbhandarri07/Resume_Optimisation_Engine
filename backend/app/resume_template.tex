@@ -1,0 +1,19 @@
+\documentclass[letterpaper,10pt]{article}
+\usepackage[margin=0.55in]{geometry}
+\usepackage{xcolor,enumitem,tabularx,ragged2e}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\definecolor{resumeNavy}{HTML}{26457B}
+\newcommand{\ResumeSection}[1]{\vspace{0.35em}{\large\bfseries\color{resumeNavy}#1}\par\vspace{-0.45em}\noindent\color{resumeNavy}\rule{\linewidth}{0.75pt}\color{black}\vspace{0.2em}}
+\newcommand{\ResumeBullet}[1]{\item #1}
+\newcommand{\ResumeEntry}[4]{\textbf{#1}\hfill #3\\\textit{#2}\hfill #4\\[-0.35em]}
+\begin{document}
+\begin{center}
+{\LARGE\bfseries\color{resumeNavy} $name}\\[-0.1em]
+{\large\itshape $headline}\\[0.15em]
+{\small $contact}
+\end{center}
+\vspace{-0.35em}
+$body
+\end{document}

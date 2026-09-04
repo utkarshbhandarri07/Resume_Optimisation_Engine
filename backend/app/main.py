@@ -12,6 +12,7 @@ from .resume_parser import parse_resume
 from .graph import build_graph, EVALUATOR_MODELS, WRITER_MODELS
 from .store import create_session, get_session, save_session, save_pdf, list_sessions
 from .pdf_generator import build_resume_pdf
+from .resume_layout import ResumeLayoutError, source_template_data
 from .oracle import get_pool
 from .ats_scorer import score_experience
 from .rate_limit import SlidingWindowRateLimiter
@@ -70,9 +71,10 @@ async def create(jd:str=Form(...),resume:UploadFile=File(...),writer_model:str=F
     if evaluator_model not in EVALUATOR_MODELS: raise HTTPException(400,"Unsupported evaluator model")
     data=await resume.read()
     if len(data)>settings.max_upload_mb*1024*1024: raise HTTPException(413,"Resume is too large")
-    try: original,experience,sections=parse_resume(data,resume.filename or "resume.pdf")
+    try: original,experience,sections,target_page_count=parse_resume(data,resume.filename or "resume.pdf")
     except ValueError as exc: raise HTTPException(400,str(exc))
-    state={"original_resume":original,"current_resume":original,"jd":jd,"original_experience":experience,"resume_sections":sections,"iteration_count":0,"is_satisfied":False,"status":"evaluating","selected_writer_model":writer_model,"evaluator_model":evaluator_model,"ats_score_original":score_experience(original,jd)["score"]}
+    source_data=source_template_data(original, sections)
+    state={"original_resume":original,"current_resume":original,"jd":jd,"original_experience":experience,"resume_sections":sections,"source_template_data":source_data,"resume_template_data":source_data,"target_page_count":target_page_count,"iteration_count":0,"is_satisfied":False,"status":"evaluating","selected_writer_model":writer_model,"evaluator_model":evaluator_model,"ats_score_original":score_experience(original,jd)["score"]}
     sid=create_session(user,state,data,resume.filename or "resume.pdf")
     try: result=build_graph(gemini_api_key,writer_model).invoke(state,config={"configurable":{"thread_id":sid}})
     except ModelTemporarilyUnavailable as exc:
@@ -103,12 +105,13 @@ def decision(sid:str,payload:ReviewRequest,user:str=Depends(current_user),gemini
         raise HTTPException(502,f"Session could not continue: {exc}")
     save_session(sid,result); item=get_session(sid,user)
     if item["state"].get("download_ready") and not item.get("pdf"):
-        save_pdf(sid, build_resume_pdf(item["state"].get("resume_sections", []), None, item["state"].get("original_resume", "")))
+        save_pdf(sid, build_resume_pdf(item["state"]["resume_template_data"], item["state"]["target_page_count"]))
     return public(item)
 @app.get("/api/sessions/{sid}/download")
 def download(sid:str,user:str=Depends(current_user)):
     item=get_session(sid,user)
     if not item or not item["state"].get("download_ready"): raise HTTPException(409,"Resume is not ready for download")
     if not item.get("pdf"):
-        save_pdf(sid, build_resume_pdf(item["state"].get("resume_sections", []), None, item["state"].get("original_resume", "")))
+        try: save_pdf(sid, build_resume_pdf(item["state"]["resume_template_data"], item["state"]["target_page_count"]))
+        except ResumeLayoutError as exc: raise HTTPException(409, str(exc))
     return StreamingResponse(BytesIO(item["pdf"]),media_type="application/pdf",headers={"Content-Disposition":"attachment; filename=optimized-resume.pdf"})

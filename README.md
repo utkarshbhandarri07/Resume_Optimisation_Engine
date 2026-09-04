@@ -42,7 +42,7 @@ Open `http://localhost:5173`. The backend API is at `http://localhost:8000/docs`
 - The evaluator history, evaluation items, resume versions, and LangGraph checkpoints are session-scoped and must be persisted in Oracle for restart-safe operation.
 - Mock OTP is development-only. Production requires SMTP configuration.
 - `oracle.py` validates and opens the supplied wallet-backed Oracle pool, `oracle_schema.sql` defines the application tables, and `migrate.py` applies the schema. The store uses Oracle when credentials are configured and an in-process adapter for local smoke tests without a database.
-- The generated PDF is a clean, selectable, single-column resume reconstruction retaining all parsed sections and replacing only Experience.
+- Generated PDFs use the server-owned LaTeX template and preserve the uploaded document's rendered page count. PDF uploads provide this count directly; DOCX uploads are rendered by LibreOffice first. The server rejects a rewrite that cannot fit the original page count without unsafe text shrinkage.
 - Every `/api` route is limited to three requests per client in a ten-second window. A `429` response includes the retry delay and the UI displays it.
 
 ## Production deployment
@@ -87,6 +87,9 @@ pip install -r requirements.txt
 python migrate.py
 uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2
 ```
+
+The production deployment script installs pinned Tectonic and LibreOffice before
+starting the API. For a manual production install, run `sudo ops/install-resume-pdf-tools.sh` once from the repository root.
 
 Use `/api/health/live` for a liveness check and `/api/health/ready` for readiness.
 The readiness endpoint should report `oracle_configured: true` after the wallet and

@@ -5,6 +5,7 @@ from .ats_scorer import score_experience
 from .llm import GeminiEvaluator, GeminiWriter, ModelExecutionError
 from .config import get_settings
 from .oracle import get_checkpointer
+from .resume_layout import ResumeLayoutError, plain_text, render_pdf, validate_template_data
 
 MODEL_CHOICES = ("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
 EVALUATOR_MODELS = set(MODEL_CHOICES)
@@ -42,14 +43,26 @@ def _build(api_key, writer_model):
     def generate(state):
         selected = [x for x in state.get("improvement_items",[]) if x.get("id") in state.get("approved_improvement_ids",[])]
         try:
-            result = GeminiWriter(api_key, state.get("selected_writer_model", writer_model)).rewrite(state["original_resume"], state["jd"], selected, state.get("user_feedback",""))
+            writer = GeminiWriter(api_key, state.get("selected_writer_model", writer_model))
+            result = writer.rewrite(state["original_resume"], state["jd"], selected, state["source_template_data"], state.get("user_feedback",""))
         except ModelExecutionError as exc:
             return _model_pause(exc, "writer", "generate")
-        sections = result.get("sections") if isinstance(result,dict) else None
-        if not isinstance(sections, list) or not sections or any(not isinstance(item, dict) or not str(item.get("heading", "")).strip() or not str(item.get("content", "")).strip() for item in sections):
-            return _model_pause(ModelExecutionError("The generation model returned an invalid resume format. Choose another generation model and retry."), "writer", "generate")
-        text = "\n\n".join(f"{x.get('heading','')}\n{x.get('content','')}" for x in sections)
-        return {"resume_sections":sections,"current_resume":text,"status":"validating"}
+        try:
+            data = validate_template_data(result, state["source_template_data"])
+            for attempt in range(3):
+                try:
+                    render_pdf(data, state["target_page_count"])
+                    break
+                except ResumeLayoutError as exc:
+                    if attempt == 2:
+                        return {"layout_error": str(exc), "status": "awaiting_review"}
+                    repaired = writer.rewrite(state["original_resume"], state["jd"], selected, state["source_template_data"], state.get("user_feedback", ""), f"The prior version did not fit exactly {state['target_page_count']} page(s): {exc}. Shorten only wording; preserve every role and bullet.")
+                    data = validate_template_data(repaired, state["source_template_data"])
+        except ModelExecutionError as exc:
+            return _model_pause(exc, "writer", "generate")
+        except ResumeLayoutError as exc:
+            return {"layout_error": str(exc), "status": "awaiting_review"}
+        return {"resume_template_data":data,"current_resume":plain_text(data),"status":"validating","layout_error":""}
     def validate(state):
         # User-approved workflow: surface the rewritten content for evaluator
         # review and final human acceptance without blocking on lexical

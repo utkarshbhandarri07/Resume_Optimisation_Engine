@@ -46,9 +46,9 @@ class GeminiWriter:
     def __init__(self, api_key: str, model: str):
         if not api_key: raise RuntimeError("Gemini API key is required")
         self.client, self.model = genai.Client(api_key=api_key), model
-    def rewrite(self, resume, jd, items, feedback=""):
+    def rewrite(self, resume, jd, items, template_data, feedback="", layout_repair=""):
         try:
-            result = self.client.models.generate_content(model=self.model, contents=generation_prompt(resume, jd, items, feedback, self.model), config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=5000))
+            result = self.client.models.generate_content(model=self.model, contents=generation_prompt(resume, jd, items, template_data, feedback, self.model, layout_repair), config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=5000))
             data = _json(result.text)
         except Exception as exc:
             raise _model_error(exc, "rewrite") from exc

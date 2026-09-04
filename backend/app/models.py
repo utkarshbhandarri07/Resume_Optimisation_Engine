@@ -37,6 +37,10 @@ class ResumeState(TypedDict, total=False):
     model_error_target: str
     model_retry_node: str
     available_models: list[str]
+    target_page_count: int
+    source_template_data: dict[str, Any]
+    resume_template_data: dict[str, Any]
+    layout_error: str
 
 class ReviewRequest(BaseModel):
     action: str = Field(pattern=r"^(improve|feedback|retry_model)$")

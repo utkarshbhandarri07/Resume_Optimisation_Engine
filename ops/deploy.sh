@@ -52,6 +52,7 @@ trap recover_services ERR
 echo "$(date -Is) deploying ${CURRENT_REVISION:0:12} -> ${REMOTE_REVISION:0:12}"
 systemctl stop "$WEB_SERVICE" "$API_SERVICE"
 runuser -u "$APP_USER" -- git -C "$APP_ROOT" pull --ff-only origin main
+bash "$APP_ROOT/ops/install-resume-pdf-tools.sh"
 
 # Requirements may change with a deployment. Reinstalling from the pinned
 # project requirements is idempotent and keeps both runtimes in sync.
