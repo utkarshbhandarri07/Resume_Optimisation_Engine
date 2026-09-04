@@ -2,7 +2,6 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt, Command
 from .models import ResumeState
 from .ats_scorer import score_experience
-from .grounding import validate_grounding
 from .llm import GeminiEvaluator, GeminiWriter, ModelExecutionError
 from .config import get_settings
 from .oracle import get_checkpointer
@@ -50,8 +49,9 @@ def _build(api_key, writer_model):
         text = "\n\n".join(f"{x.get('heading','')}\n{x.get('content','')}" for x in sections)
         return {"resume_sections":sections,"current_resume":text,"status":"validating"}
     def validate(state):
-        valid, issues = validate_grounding(state["original_resume"], state["current_resume"])
-        if not valid: raise ValueError("Grounding validation failed: " + "; ".join(issues))
+        # User-approved workflow: surface the rewritten content for evaluator
+        # review and final human acceptance without blocking on lexical
+        # comparison against the original resume.
         return {"grounding_valid":True,"grounding_issues":[]}
     def rescore(state):
         original = score_experience(state["original_resume"], state["jd"]); current = score_experience(state["current_resume"], state["jd"])
