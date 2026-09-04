@@ -11,8 +11,13 @@ WEB_SERVICE="resume-optimizer-web.service"
 MIGRATION_SERVICE="resume-optimizer-migrate.service"
 LOCK_FILE="/var/lock/resume-optimizer-deploy.lock"
 LOG_FILE="/var/log/resume-optimizer/deploy.log"
+APP_LOG_DIR="/var/log/resume-optimizer"
 
-mkdir -p "$(dirname "$LOG_FILE")"
+install -d -o "$APP_USER" -g "$APP_USER" -m 750 "$APP_LOG_DIR"
+TODAY_LOG="$APP_LOG_DIR/resume-optimizer-$(TZ=Asia/Kolkata date +%F).log"
+touch "$TODAY_LOG"
+chown "$APP_USER:$APP_USER" "$TODAY_LOG"
+chmod 640 "$TODAY_LOG"
 exec >>"$LOG_FILE" 2>&1
 exec 9>"$LOCK_FILE"
 flock -n 9 || { echo "$(date -Is) deployment already running; exiting"; exit 0; }

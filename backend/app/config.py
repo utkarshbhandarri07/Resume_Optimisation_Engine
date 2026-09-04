@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     max_iterations: int = 3
     rate_limit_requests: int = 3
     rate_limit_window_seconds: int = 10
+    log_dir: str = "logs"
+    log_level: str = "INFO"
+    smtp_secure: bool = False
 
     @property
     def allowed_origins(self) -> list[str]:

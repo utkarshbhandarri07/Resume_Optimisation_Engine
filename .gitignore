@@ -29,6 +29,8 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+logs/
+**/logs/
 
 # JavaScript and Django build output
 node_modules/

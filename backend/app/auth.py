@@ -8,10 +8,18 @@ from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from .config import get_settings
 from .oracle import get_pool
+from .logging_config import configure_application_logging
 
 _otp_store = {}
 _users = {}
 security = HTTPBearer(auto_error=False)
+
+logger = configure_application_logging(get_settings().log_dir, get_settings().log_level)
+
+
+def _email_fingerprint(email: str) -> str:
+    """Correlate authentication events without storing email addresses in logs."""
+    return hashlib.sha256(email.lower().encode()).hexdigest()[:12]
 
 def send_otp(email: str, name: str) -> str:
     settings = get_settings(); code = f"{secrets.randbelow(1_000_000):06d}"
@@ -29,8 +37,17 @@ def send_otp(email: str, name: str) -> str:
     # A dedicated verified sender is preferred; using the authenticated SMTP
     # account as the fallback keeps deployments with a single mailbox usable.
     msg = EmailMessage(); msg["Subject"] = "Your Resume Optimizer verification code"; msg["From"] = settings.email_from or settings.smtp_username; msg["To"] = email; msg.set_content(f"Your verification code is {code}. It expires in {settings.otp_expiry_minutes} minutes.")
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-        server.starttls(); server.login(settings.smtp_username, settings.smtp_password); server.send_message(msg)
+    try:
+        client = smtplib.SMTP_SSL if settings.smtp_secure else smtplib.SMTP
+        with client(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+            if not settings.smtp_secure:
+                server.ehlo(); server.starttls(); server.ehlo()
+            server.login(settings.smtp_username, settings.smtp_password)
+            server.send_message(msg)
+    except (OSError, smtplib.SMTPException):
+        logger.exception("otp_delivery_failed email_hash=%s port=%s implicit_tls=%s", _email_fingerprint(email), settings.smtp_port, settings.smtp_secure)
+        raise HTTPException(503, "Unable to send verification email. Check the configured SMTP settings and try again.")
+    logger.info("otp_delivery_succeeded email_hash=%s", _email_fingerprint(email))
     return ""
 
 def verify_otp(email: str, code: str) -> str:
