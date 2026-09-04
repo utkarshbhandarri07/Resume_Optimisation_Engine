@@ -36,9 +36,9 @@ class GeminiEvaluator:
     def evaluate(self, resume, jd, history, previous=None, feedback=""):
         try:
             result = self.client.models.generate_content(model=self.model, contents=evaluator_prompt(resume, jd, history, feedback, previous), config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=3000))
+            data = _json(result.text)
         except Exception as exc:
             raise _model_error(exc, "evaluation") from exc
-        data = _json(result.text)
         data.setdefault("improvement_items", []); data.setdefault("overall_score", 0); data.setdefault("feedback_relevant", True)
         return data
 
@@ -49,6 +49,7 @@ class GeminiWriter:
     def rewrite(self, resume, jd, items, feedback=""):
         try:
             result = self.client.models.generate_content(model=self.model, contents=generation_prompt(resume, jd, items, feedback, self.model), config=types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=5000))
+            data = _json(result.text)
         except Exception as exc:
             raise _model_error(exc, "rewrite") from exc
-        return _json(result.text)
+        return data
