@@ -90,15 +90,22 @@ def _render_sections(sections: list[dict]) -> list[dict]:
 
 def build_resume_pdf(sections: list[dict], rewritten_experience: str | None = None, original_resume: str = "") -> bytes:
     """Build a selected resume version in the supplied navy, one-page-friendly style."""
+    render_sections = _render_sections(sections)
+    # Use the readable reference density for a normal one-page resume. Only very
+    # long documents use the compact fallback, which avoids a second page without
+    # leaving a short resume stranded in the upper two-thirds of the page.
+    content_size = sum(len(str(section.get("heading", ""))) + len(str(section.get("content", ""))) for section in render_sections)
+    extra_compact = content_size > 3900
+    compact = content_size > 2700
     output = BytesIO()
-    document = SimpleDocTemplate(output, pagesize=LETTER, leftMargin=.55 * inch, rightMargin=.55 * inch, topMargin=.34 * inch, bottomMargin=.32 * inch, title="Optimized Resume")
+    document = SimpleDocTemplate(output, pagesize=LETTER, leftMargin=.55 * inch, rightMargin=.55 * inch, topMargin=.38 * inch, bottomMargin=.36 * inch, title="Optimized Resume")
     base = getSampleStyleSheet()
-    name_style = ParagraphStyle("ResumeName", parent=base["Normal"], fontName="Helvetica-Bold", fontSize=20, leading=22, alignment=TA_CENTER, textColor=NAVY, spaceAfter=0)
-    role_style = ParagraphStyle("ResumeRole", parent=base["Normal"], fontName="Helvetica-Oblique", fontSize=11.5, leading=13, alignment=TA_CENTER, textColor=TEXT, spaceAfter=1)
-    contact_style = ParagraphStyle("ResumeContact", parent=base["Normal"], fontName="Helvetica", fontSize=8, leading=9.5, alignment=TA_CENTER, textColor=MUTED, spaceAfter=5)
-    section_style = ParagraphStyle("ResumeSection", parent=base["Normal"], fontName="Helvetica-Bold", fontSize=11.2, leading=12.5, textColor=NAVY, spaceBefore=0, spaceAfter=0)
-    body_style = ParagraphStyle("ResumeBody", parent=base["Normal"], fontName="Helvetica", fontSize=7.65, leading=9.05, textColor=TEXT, spaceAfter=.7)
-    bullet_style = ParagraphStyle("ResumeBullet", parent=body_style, leftIndent=11, firstLineIndent=-7, spaceAfter=1.1)
+    name_style = ParagraphStyle("ResumeName", parent=base["Normal"], fontName="Helvetica-Bold", fontSize=20 if extra_compact else 22 if compact else 24, leading=22 if extra_compact else 24 if compact else 27, alignment=TA_CENTER, textColor=NAVY, spaceAfter=0)
+    role_style = ParagraphStyle("ResumeRole", parent=base["Normal"], fontName="Helvetica-Oblique", fontSize=11.5 if extra_compact else 12.5 if compact else 13.5, leading=13 if extra_compact else 14.5 if compact else 16, alignment=TA_CENTER, textColor=TEXT, spaceAfter=1)
+    contact_style = ParagraphStyle("ResumeContact", parent=base["Normal"], fontName="Helvetica", fontSize=8 if extra_compact else 8.7 if compact else 9.4, leading=9.5 if extra_compact else 10.2 if compact else 11, alignment=TA_CENTER, textColor=MUTED, spaceAfter=5 if extra_compact else 6 if compact else 8)
+    section_style = ParagraphStyle("ResumeSection", parent=base["Normal"], fontName="Helvetica-Bold", fontSize=11.2 if extra_compact else 12.1 if compact else 13.2, leading=12.5 if extra_compact else 13.7 if compact else 15, textColor=NAVY, spaceBefore=0, spaceAfter=0)
+    body_style = ParagraphStyle("ResumeBody", parent=base["Normal"], fontName="Helvetica", fontSize=7.65 if extra_compact else 8.35 if compact else 9.1, leading=9.05 if extra_compact else 9.85 if compact else 10.8, textColor=TEXT, spaceAfter=.7 if extra_compact else 1 if compact else 1.3)
+    bullet_style = ParagraphStyle("ResumeBullet", parent=body_style, leftIndent=11 if extra_compact else 12 if compact else 13, firstLineIndent=-7 if extra_compact else -7.5 if compact else -8, spaceAfter=1.1 if extra_compact else 1.5 if compact else 2.1)
     skill_label_style = ParagraphStyle("SkillLabel", parent=body_style, fontName="Helvetica-Bold", textColor=TEXT, spaceAfter=0)
     skill_value_style = ParagraphStyle("SkillValue", parent=body_style, textColor=TEXT, spaceAfter=0)
 
@@ -111,13 +118,13 @@ def build_resume_pdf(sections: list[dict], rewritten_experience: str | None = No
     else:
         story.append(Spacer(1, 7))
 
-    for section in _render_sections(sections):
+    for section in render_sections:
         heading, content = str(section.get("heading", "")).strip(), str(section.get("content", "")).strip()
         if rewritten_experience is not None and heading.lower() in EXPERIENCE_HEADINGS:
             content = rewritten_experience.strip()
         if not heading or not content:
             continue
-        story.extend([_paragraph(heading.upper(), section_style), HRFlowable(width="100%", thickness=.7, color=NAVY, spaceAfter=2)])
+        story.extend([_paragraph(heading.upper(), section_style), HRFlowable(width="100%", thickness=.7 if compact else .85, color=NAVY, spaceAfter=2 if compact else 3)])
         if heading.lower() in {"skills", "key skills", "technical skills", "core competencies"}:
             rows = _skill_rows(content)
             table = Table([[_paragraph(label, skill_label_style), _paragraph(value, skill_value_style)] for label, value in rows], colWidths=[1.42 * inch, 5.15 * inch], hAlign="LEFT")
@@ -129,6 +136,6 @@ def build_resume_pdf(sections: list[dict], rewritten_experience: str | None = No
                     story.append(_paragraph(f"• {line.lstrip('•-* ').strip()}", bullet_style))
                 else:
                     story.append(_paragraph(line, body_style))
-        story.append(Spacer(1, 2.3))
+        story.append(Spacer(1, 2.3 if extra_compact else 3 if compact else 4))
     document.build(story)
     return output.getvalue()
