@@ -63,6 +63,10 @@ class SlidingWindowRateLimiter:
                     connection.commit()
                     return True, 0
                 started_at, count = row
+                # Oracle can return TIMESTAMP WITH TIME ZONE columns as a
+                # naive datetime, depending on client/session settings.
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
                 elapsed = max(0.0, (now - started_at).total_seconds())
                 if elapsed >= self.window:
                     cursor.execute(
