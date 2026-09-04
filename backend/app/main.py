@@ -101,11 +101,13 @@ def decision(sid:str,payload:ReviewRequest,user:str=Depends(current_user),gemini
         logger.exception("session_decision_failed session_id=%s action=%s", sid, payload.action)
         raise HTTPException(502,f"Session could not continue: {exc}")
     save_session(sid,result); item=get_session(sid,user)
-    if item["state"].get("download_ready") and not item.get("pdf"): save_pdf(sid,build_resume_pdf(item["state"].get("resume_sections",[]),None))
+    if item["state"].get("download_ready") and not item.get("pdf"):
+        save_pdf(sid, build_resume_pdf(item["state"].get("resume_sections", []), None, item["state"].get("original_resume", "")))
     return public(item)
 @app.get("/api/sessions/{sid}/download")
 def download(sid:str,user:str=Depends(current_user)):
     item=get_session(sid,user)
     if not item or not item["state"].get("download_ready"): raise HTTPException(409,"Resume is not ready for download")
-    if not item.get("pdf"): save_pdf(sid,build_resume_pdf(item["state"].get("resume_sections",[]),None))
+    if not item.get("pdf"):
+        save_pdf(sid, build_resume_pdf(item["state"].get("resume_sections", []), None, item["state"].get("original_resume", "")))
     return StreamingResponse(BytesIO(item["pdf"]),media_type="application/pdf",headers={"Content-Disposition":"attachment; filename=optimized-resume.pdf"})
