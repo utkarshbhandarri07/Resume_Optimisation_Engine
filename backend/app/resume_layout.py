@@ -126,7 +126,8 @@ def _body(data: dict) -> str:
 
 
 def render_pdf(data: dict, target_page_count: int) -> bytes:
-    executable = shutil.which("tectonic")
+    pinned_binary = Path("/usr/local/bin/tectonic")
+    executable = shutil.which("tectonic") or (str(pinned_binary) if pinned_binary.is_file() and pinned_binary.stat().st_mode & 0o111 else None)
     if not executable: raise ResumeLayoutError("LaTeX renderer is not installed. Contact the administrator to complete the Tectonic deployment.")
     template = Template(files("app").joinpath("resume_template.tex").read_text(encoding="utf-8"))
     tex = template.substitute(name=_latex(data["header"].get("name", "")), headline=_latex(data["header"].get("headline", "")), contact=_latex(data["header"].get("contact", "")), body=_body(data))
