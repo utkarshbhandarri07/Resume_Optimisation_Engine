@@ -26,7 +26,9 @@ def send_otp(email: str, name: str) -> str:
         if settings.app_env != "development": raise HTTPException(503, "Mock email provider is disabled")
         return code
     if not settings.smtp_host: raise HTTPException(503, "Email provider is not configured")
-    msg = EmailMessage(); msg["Subject"] = "Your Resume Optimizer verification code"; msg["From"] = settings.email_from; msg["To"] = email; msg.set_content(f"Your verification code is {code}. It expires in {settings.otp_expiry_minutes} minutes.")
+    # A dedicated verified sender is preferred; using the authenticated SMTP
+    # account as the fallback keeps deployments with a single mailbox usable.
+    msg = EmailMessage(); msg["Subject"] = "Your Resume Optimizer verification code"; msg["From"] = settings.email_from or settings.smtp_username; msg["To"] = email; msg.set_content(f"Your verification code is {code}. It expires in {settings.otp_expiry_minutes} minutes.")
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
         server.starttls(); server.login(settings.smtp_username, settings.smtp_password); server.send_message(msg)
     return ""

@@ -11,6 +11,10 @@
 **/wallet/
 passwordforwallet.txt
 Wallet_Project1.zip
+# Local deployment credentials (including the files supplied for this VM)
+backend-secrets.env*
+*Creds*.txt
+*credentials*.txt
 
 # Python environments, caches, and test output
 venv/
