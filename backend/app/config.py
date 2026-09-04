@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     app_env: str = "development"
     jwt_secret: str = "change-me-in-production"
-    jwt_expiry_minutes: int = 60
+    jwt_expiry_minutes: int = 300
     cors_origins: str = "http://localhost:5173"
     google_api_key: str = ""
     google_model: str = "gemini-2.5-flash"

@@ -5,6 +5,7 @@
   const KEYS = {token:"ro_token",name:"ro_name",email:"ro_email",gemini:"ro_gemini_key",model:"ro_writer_model",active:"ro_active_session"};
   const app = document.getElementById("app");
   let otpSent = false;
+  let draft = {file:null,jd:""};
 
   const read = (key, storage=localStorage) => storage.getItem(key) || "";
   const write = (key, value, storage=localStorage) => storage.setItem(key, value);
@@ -55,8 +56,8 @@
 
   function wireHeader() {
     document.getElementById("profile-button")?.addEventListener("click",()=>document.getElementById("profile-menu").classList.toggle("hidden"));
-    document.getElementById("new-session")?.addEventListener("click",()=>{sessionStorage.removeItem(KEYS.active);renderUpload();});
-    document.getElementById("logout")?.addEventListener("click",()=>{clearBrowserData();otpSent=false;renderAuth();});
+    document.getElementById("new-session")?.addEventListener("click",()=>{sessionStorage.removeItem(KEYS.active);draft={file:null,jd:""};renderUpload();});
+    document.getElementById("logout")?.addEventListener("click",()=>{clearBrowserData();otpSent=false;draft={file:null,jd:""};renderAuth();});
     document.getElementById("open-settings")?.addEventListener("click",()=>document.getElementById("settings-dialog").showModal());
     document.getElementById("save-settings")?.addEventListener("click",event=>{event.preventDefault();write(KEYS.model,document.getElementById("settings-model").value);write(KEYS.gemini,document.getElementById("settings-key").value);document.getElementById("settings-dialog").close();});
   }
@@ -75,10 +76,10 @@
   }
 
   function renderUpload(status="") {
-    app.innerHTML=`<section class="shell">${header()}${settings()}<section class="hero compact"><p class="eyebrow">NEW SESSION</p><h1>Bring the role into focus.</h1><p>Each session starts a fresh evaluator conversation.</p></section><section class="card"><label>Gemini API key<input id="gemini-key" type="password" value="${escapeHtml(read(KEYS.gemini))}" autocomplete="off"></label><small class="muted">Stored only in this browser until Logout.</small><label>Generation model<select id="writer-model">${MODELS.map(model=>`<option ${model===(read(KEYS.model)||MODELS[0])?"selected":""}>${model}</option>`).join("")}</select></label><label>Resume<input id="resume-file" type="file" accept=".pdf,.docx"></label><label>Job description<textarea id="job-description" rows="12" placeholder="Paste the complete job description..."></textarea></label><button id="evaluate">Evaluate resume</button>${message(status)}</section></section>`;
+    app.innerHTML=`<section class="shell">${header()}${settings()}<section class="hero compact"><p class="eyebrow">NEW SESSION</p><h1>Bring the role into focus.</h1><p>Each session starts a fresh evaluator conversation.</p></section><section class="card"><label>Gemini API key<input id="gemini-key" type="password" value="${escapeHtml(read(KEYS.gemini))}" autocomplete="off"></label><small class="muted">Stored only in this browser until Logout.</small><label>Generation model<select id="writer-model">${MODELS.map(model=>`<option ${model===(read(KEYS.model)||MODELS[0])?"selected":""}>${model}</option>`).join("")}</select></label><label>Resume<input id="resume-file" type="file" accept=".pdf,.docx"></label>${draft.file?`<p class="muted">Using retained resume: ${escapeHtml(draft.file.name)}</p>`:""}<label>Job description<textarea id="job-description" rows="12" placeholder="Paste the complete job description...">${escapeHtml(draft.jd)}</textarea></label><button id="evaluate">Evaluate resume</button>${message(status)}</section></section>`;
     wireHeader();
     document.getElementById("evaluate").addEventListener("click",async()=>{
-      const file=document.getElementById("resume-file").files[0],jd=document.getElementById("job-description").value.trim(),key=document.getElementById("gemini-key").value.trim(),model=document.getElementById("writer-model").value;
+      const chosenFile=document.getElementById("resume-file").files[0],jd=document.getElementById("job-description").value.trim(),key=document.getElementById("gemini-key").value.trim(),model=document.getElementById("writer-model").value;if(chosenFile)draft.file=chosenFile;draft.jd=jd;const file=draft.file;
       if(!file||jd.length<30||!key)return renderUpload("Add a PDF/DOCX, a complete job description, and your Gemini API key.");
       try{disableButtons(true);write(KEYS.gemini,key);write(KEYS.model,model);const form=new FormData();form.append("resume",file);form.append("jd",jd);form.append("writer_model",model);const session=await (await api("/sessions",{method:"POST",headers:{"X-Gemini-API-Key":key},body:form})).json();renderSession(session);}catch(err){renderUpload(err.message);showErrorDialog(err.message);}finally{disableButtons(false);}
     });
@@ -88,14 +89,13 @@
     const evaluation=session.evaluation||{};
     const issues=(session.improvement_items||[]).map(item=>`<label class="issue"><input type="checkbox" value="${escapeHtml(item.id)}" checked><span><b>${escapeHtml(item.priority||"medium")}</b> · ${escapeHtml(item.target_section||"Resume")}<br>${escapeHtml(item.recommendation)}</span></label>`).join("")||"<p class='muted'>No open improvement points.</p>";
     const resume=session.current_resume?`<section class="compare"><article><h2>Current best resume</h2><pre>${escapeHtml(session.current_resume)}</pre></article></section>`:"";
-    const download=session.download_ready?"<button id='download'>Download optimized PDF</button>":"";
-    app.innerHTML=`<section class="shell">${header()}${settings()}<section class="hero compact"><p class="eyebrow">EVALUATOR REVIEW</p><h1>${escapeHtml(evaluation.overall_score||0)}/100 fit score</h1><p>${escapeHtml(evaluation.executive_assessment||"Review the evaluator findings below.")}</p></section><section class="card"><h2>Key improvement points</h2>${issues}${session.feedback_error?message(session.feedback_error):""}<div class="actions"><button id="improve">Improve resume</button><button class="secondary" id="feedback">Give feedback</button><button class="secondary" id="accept">Accept</button>${download}</div>${message(status)}</section>${resume}</section>`;
+    const preview=session.status==="preview_ready",download=session.download_ready?"<button id='download'>Download optimized PDF</button>":"",actions=preview?download:`<button id="improve">Improve resume</button><button class="secondary" id="feedback">Give feedback</button>`;
+    app.innerHTML=`<section class="shell">${header()}${settings()}<section class="hero compact"><p class="eyebrow">${preview?"RESUME PREVIEW":"EVALUATOR REVIEW"}</p><h1>${escapeHtml(evaluation.overall_score||0)}/100 fit score</h1><p>${escapeHtml(preview?"Review the optimized resume below, then download it when ready.":(evaluation.executive_assessment||"Review the evaluator findings below."))}</p></section><section class="card"><h2>Key improvement points</h2>${issues}${session.feedback_error?message(session.feedback_error):""}<div class="actions">${actions}</div>${message(status)}</section>${resume}</section>`;
     wireHeader();
     const continueSession=async data=>{const key=read(KEYS.gemini);if(!key)throw new Error("Add your Gemini API key in Settings before continuing.");const updated=await (await api(`/sessions/${session.session_id}/decision`,{method:"POST",headers:{"Content-Type":"application/json","X-Gemini-API-Key":key},body:JSON.stringify(data)})).json();renderSession(updated);};
     document.getElementById("improve")?.addEventListener("click",async()=>{try{disableButtons(true);await continueSession({action:"improve",approved_improvement_ids:[...document.querySelectorAll(".issue input:checked")].map(input=>input.value)});}catch(err){renderReview(session,err.message);showErrorDialog(err.message);}finally{disableButtons(false);}});
     document.getElementById("feedback")?.addEventListener("click",async()=>{const feedback=window.prompt("Enter feedback about the resume or job description:");if(!feedback?.trim())return;try{disableButtons(true);await continueSession({action:"feedback",feedback});}catch(err){renderReview(session,err.message);showErrorDialog(err.message);}finally{disableButtons(false);}});
-    document.getElementById("accept")?.addEventListener("click",async()=>{try{disableButtons(true);await continueSession({action:"accept"});}catch(err){renderReview(session,err.message);}finally{disableButtons(false);}});
-    document.getElementById("download")?.addEventListener("click",async()=>{try{disableButtons(true);const response=await api(`/sessions/${session.session_id}/download`);const blob=await response.blob(),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="optimized-resume.pdf";link.click();URL.revokeObjectURL(link.href);}catch(err){renderReview(session,err.message);}finally{disableButtons(false);}});
+    document.getElementById("download")?.addEventListener("click",async()=>{try{disableButtons(true);const response=await api(`/sessions/${session.session_id}/download`);const blob=await response.blob(),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="optimized-resume.pdf";link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);sessionStorage.removeItem(KEYS.active);draft={file:draft.file,jd:""};renderUpload("Optimized resume downloaded. The job description was cleared; your uploaded resume is retained for the next session.");}catch(err){renderReview(session,err.message);showErrorDialog(err.message);}finally{disableButtons(false);}});
   }
 
   token()?(cachedSession()?renderReview(cachedSession()):renderUpload()):renderAuth();

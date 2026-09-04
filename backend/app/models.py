@@ -39,7 +39,7 @@ class ResumeState(TypedDict, total=False):
     available_models: list[str]
 
 class ReviewRequest(BaseModel):
-    action: str = Field(pattern=r"^(improve|feedback|accept|retry_model)$")
+    action: str = Field(pattern=r"^(improve|feedback|retry_model)$")
     feedback: str = Field(default="", max_length=5000)
     approved_improvement_ids: list[str] = Field(default_factory=list)
     model: str = Field(default="", max_length=80)
