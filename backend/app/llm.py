@@ -6,12 +6,18 @@ from .config import get_settings
 from .prompts import evaluator_prompt, generation_prompt
 
 
-class ModelTemporarilyUnavailable(RuntimeError):
-    """A retryable model-provider capacity error safe to return to clients."""
-
-
 class ModelExecutionError(RuntimeError):
     """A safe summary of a model failure that can trigger model selection."""
+
+
+class ModelTemporarilyUnavailable(ModelExecutionError):
+    """A retryable provider-capacity error that pauses the LangGraph session.
+
+    This deliberately inherits ``ModelExecutionError``. Every evaluator/writer
+    node catches that base class and turns the failure into the persistent
+    ``model_selection`` interrupt instead of letting a 503 escape to the
+    browser as a generic request failure.
+    """
 
 
 def _model_error(exc: Exception, operation: str) -> ModelExecutionError:
