@@ -387,9 +387,9 @@ def render_pdf(data: dict, target_page_count: int) -> bytes:
     if target_page_count < 1:
         raise ResumeLayoutError("The uploaded resume has no rendered pages to preserve.")
     variants = (
-        {"margin": 34, "top_margin": 42, "bottom_margin": 32, "name_size": 23, "headline_size": 13, "contact_size": 10, "continued_size": 12, "section_size": 14, "section_height": 24, "body_font": "Times-Roman", "body_bold": "Times-Bold", "body_size": 10.2, "leading": 12.1, "gap": 2.0, "role_gap": 2.5, "bullet_indent": 2, "bullet_gap": 10, "max_spread": 12},
-        {"margin": 31, "top_margin": 38, "bottom_margin": 29, "name_size": 21, "headline_size": 12, "contact_size": 9.5, "continued_size": 11, "section_size": 13, "section_height": 21, "body_font": "Times-Roman", "body_bold": "Times-Bold", "body_size": 9.4, "leading": 10.9, "gap": 1.5, "role_gap": 2.0, "bullet_indent": 2, "bullet_gap": 9, "max_spread": 9},
-        {"margin": 28, "top_margin": 35, "bottom_margin": 27, "name_size": 20, "headline_size": 11.5, "contact_size": 9, "continued_size": 10.5, "section_size": 12.3, "section_height": 19, "body_font": "Times-Roman", "body_bold": "Times-Bold", "body_size": 8.8, "leading": 10.0, "gap": 1.2, "role_gap": 1.5, "bullet_indent": 1, "bullet_gap": 8, "max_spread": 7},
+        {"margin": 34, "top_margin": 42, "bottom_margin": 32, "name_size": 23, "headline_size": 13, "contact_size": 10, "continued_size": 12, "section_size": 14, "section_height": 24, "body_font": "Times-Roman", "body_bold": "Times-Bold", "body_size": 10.2, "leading": 12.1, "gap": 2.0, "role_gap": 2.5, "bullet_indent": 2, "bullet_gap": 10, "max_spread": 5},
+        {"margin": 31, "top_margin": 38, "bottom_margin": 29, "name_size": 21, "headline_size": 12, "contact_size": 9.5, "continued_size": 11, "section_size": 13, "section_height": 21, "body_font": "Times-Roman", "body_bold": "Times-Bold", "body_size": 9.4, "leading": 10.9, "gap": 1.5, "role_gap": 2.0, "bullet_indent": 2, "bullet_gap": 9, "max_spread": 4},
+        {"margin": 28, "top_margin": 35, "bottom_margin": 27, "name_size": 20, "headline_size": 11.5, "contact_size": 9, "continued_size": 10.5, "section_size": 12.3, "section_height": 19, "body_font": "Times-Roman", "body_bold": "Times-Bold", "body_size": 8.8, "leading": 10.0, "gap": 1.2, "role_gap": 1.5, "bullet_indent": 1, "bullet_gap": 8, "max_spread": 3},
     )
     for base in variants:
         style = dict(base)
