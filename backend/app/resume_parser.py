@@ -7,19 +7,22 @@ import tempfile
 from pypdf import PdfReader
 from docx import Document
 
-HEADINGS = {"experience", "work experience", "professional experience", "employment history"}
+EXPERIENCE_HEADINGS = {"experience", "work experience", "professional experience", "employment history"}
+SECTION_HEADINGS = EXPERIENCE_HEADINGS | {"summary", "professional summary", "projects", "project experience", "technical skills", "skills", "education", "certification", "certifications", "certificates"}
 
 def _sections(text: str) -> list[dict[str, str]]:
     lines = [re.sub(r"\s+", " ", x).strip() for x in text.splitlines() if x.strip()]
     sections, current = [], {"heading": "", "content": []}
     for line in lines:
         normalized = re.sub(r"[^a-z ]", "", line.lower()).strip()
-        heading = normalized in HEADINGS or (len(line) < 55 and line.upper() == line and len(line.split()) <= 6)
+        heading = normalized in SECTION_HEADINGS or (len(line) < 55 and line.upper() == line and len(line.split()) <= 6)
         if heading and current["heading"]:
             sections.append({"heading": current["heading"], "content": "\n".join(current["content"]).strip()})
             current = {"heading": line, "content": []}
         elif heading:
-            current["heading"] = line
+            # Header/contact text can precede the first section. It belongs to
+            # the immutable resume header, not to Summary.
+            current = {"heading": line, "content": []}
         else:
             current["content"].append(line)
     if current["heading"] or current["content"]:
@@ -53,7 +56,7 @@ def parse_resume(data: bytes, filename: str):
     if not text:
         raise ValueError("The resume contains no extractable text")
     sections = _sections(text)
-    exp = next((s["content"] for s in sections if s["heading"].lower().strip() in HEADINGS), "")
+    exp = next((s["content"] for s in sections if s["heading"].lower().strip() in EXPERIENCE_HEADINGS), "")
     if not exp:
         raise ValueError("Could not identify an Experience section")
     return text, exp, sections, target_page_count

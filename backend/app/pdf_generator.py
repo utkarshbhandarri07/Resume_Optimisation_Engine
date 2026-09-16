@@ -1,4 +1,4 @@
-"""Backward-compatible entry point for the fixed-page LaTeX renderer."""
+"""Backward-compatible entry point for the fixed-page ReportLab renderer."""
 from .resume_layout import render_pdf
 
 

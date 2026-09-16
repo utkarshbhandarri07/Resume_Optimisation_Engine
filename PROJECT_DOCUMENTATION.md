@@ -31,7 +31,8 @@ From the user's perspective the flow is:
    without rewriting.
 7. The writer model rewrites only the approved areas while preserving protected
    facts. The server produces a structured resume representation, not model-
-   generated LaTeX, and renders it through the server-owned LaTeX template.
+   generated PDF data, and renders it through the server-owned fixed-page
+   ReportLab layout.
 8. The rewritten resume is rescored and re-evaluated by the same evaluator
    conversation. The UI shows a preview, evaluator comparison, ATS comparison,
    issue resolution state, and the current best version.
@@ -78,8 +79,7 @@ Resume_Optimisation_Project/
 │   │   ├── prompts.py              # evaluator and writer system contracts
 │   │   ├── resume_parser.py        # PDF/DOCX extraction and source page count
 │   │   ├── ats_scorer.py           # transparent deterministic ATS heuristic
-│   │   ├── resume_layout.py        # structured-data validation and Tectonic render
-│   │   ├── resume_template.tex     # locked server-owned visual template
+│   │   ├── resume_layout.py        # structured-data validation and ReportLab render
 │   │   ├── pdf_generator.py        # compatibility wrapper over resume_layout
 │   │   ├── grounding.py            # retained grounding helpers
 │   │   ├── oracle.py               # Oracle pool and OracleSaver checkpointer
@@ -103,9 +103,8 @@ Resume_Optimisation_Project/
 │   └── .env.example
 ├── ops/
 │   ├── deploy.sh                   # idempotent live deployment script
-│   ├── install-resume-pdf-tools.sh # pinned Tectonic + LibreOffice installer
+│   ├── install-resume-pdf-tools.sh # LibreOffice installer for DOCX page counts
 │   ├── resume-optimizer.cron       # midnight-IST deployment schedule
-│   └── tectonic-smoke.tex          # deploy-time compiler warm-up document
 ├── README.md                       # concise setup guide
 └── PROJECT_DOCUMENTATION.md         # this detailed handover
 ```
@@ -121,7 +120,7 @@ Nginx :80 ── / ─────► Django/Gunicorn 127.0.0.1:5173
   └──────── /api/ ──► FastAPI/Uvicorn 127.0.0.1:8000
                               │           │
                               │           ├── Gemini evaluator and writer APIs
-                              │           ├── Tectonic + locked LaTeX template
+                              │           ├── ReportLab + locked fixed-page layout
                               │           └── LibreOffice (DOCX page-count conversion)
                               ▼
                     Oracle Autonomous Database via wallet
@@ -378,7 +377,7 @@ and reproducible from the same text/JD inputs.
 
 ### 5.3 Structured grounding and rendering
 
-The server owns formatting. Gemini never supplies raw LaTeX.
+The server owns formatting. Gemini never supplies raw PDF markup or ReportLab instructions.
 
 1. `source_template_data()` converts parsed source into header, summary, skill
    groups, role metadata/bullets, education, and certifications.
@@ -387,16 +386,14 @@ The server owns formatting. Gemini never supplies raw LaTeX.
    certifications, preserves role count and bullet count, overwrites title,
    company, dates, location, header, education, and certifications from source,
    and rejects empty/invalid arrays.
-4. `_latex()` escapes all special LaTeX characters in model/user text. The only
-   TeX commands originate in `backend/app/resume_template.tex` and
-   `resume_layout.py`.
-5. `render_pdf()` substitutes safe structured data into the template, invokes
-   Tectonic in an isolated temporary directory, and uses `pypdf` to reject any
-   result whose page count differs from `target_page_count`.
+4. `resume_layout` validates the structured fields, restores protected source
+   facts, and never accepts model-provided markup.
+5. `render_pdf()` draws the data through the locked ReportLab layout in memory
+   and uses `pypdf` to reject any result whose page count differs from
+   `target_page_count`.
 
-The deployment installs pinned Tectonic 0.16.9 for ARM64 and LibreOffice. The
-deployment script compiles `ops/tectonic-smoke.tex` as `resumeopt` to warm
-Tectonic's package cache before user traffic.
+The deployment installs LibreOffice for DOCX page-count conversion. ReportLab
+is a Python dependency and needs no separate compiler or package cache.
 
 ## 6. Rate limiting
 
@@ -535,7 +532,7 @@ The deployment work followed this sequence:
    then allowed `ssh`/`http` through firewalld. Nginx fronted application ports;
    Uvicorn/Gunicorn were bound to `127.0.0.1` only.
 4. Installed Oracle Linux dependencies, Git, Python virtual environments,
-   Nginx, Gunicorn, Uvicorn, LibreOffice, and the pinned ARM64 Tectonic runtime.
+   Nginx, Gunicorn, Uvicorn, LibreOffice, and the Python ReportLab renderer.
 5. Cloned the GitHub repository to `/opt/resume-optimizer/app`, created the
    `resumeopt` service account, and installed requirements into separate
    `backend/.venv` and `frontend/.venv` environments.
@@ -610,7 +607,7 @@ Directive-by-directive:
   upload cap while allowing multipart overhead.
 - `/api/` is forwarded to FastAPI on private loopback port 8000. It has a
   15-second connection timeout and 240-second send/read/client timeouts because
-  a Gemini call plus LaTeX compile can exceed Nginx's default 60 seconds.
+  a Gemini call plus PDF rendering can exceed Nginx's default 60 seconds.
 - `/` is forwarded to Django/Gunicorn on private loopback port 5173, including
   static page delivery.
 - HTTP/1.1 and the forwarded headers preserve host, original client IP,
@@ -828,8 +825,8 @@ sets the intended schedule.
    `/var/lock/resume-optimizer-deploy.lock` using `flock`;
 2. `git fetch`es `origin/main` as `resumeopt` and exits with no downtime if the
    remote commit equals current `HEAD`;
-3. on change, stops web/API, fast-forwards `main`, installs/verifies PDF tools,
-   warms Tectonic, reinstalls pinned Python requirements, runs Django
+3. on change, stops web/API, fast-forwards `main`, installs/verifies LibreOffice,
+   reinstalls pinned Python requirements, runs Django
    `collectstatic`, invokes the migration service, restarts both services, and
    validates/reloads Nginx;
 4. if a deployment command fails, its trap attempts to restart API/web services;
@@ -903,4 +900,3 @@ restart `resume-optimizer-api.service`. Do not leave secret uploads in `/tmp`.
   active improvement items in persisted session state. If normalized reporting
   or administrator analytics is added, extend `store.py` to write/read that
   table explicitly.
-

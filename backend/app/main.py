@@ -58,17 +58,16 @@ def public(item):
 def pdf_rendering_error(exc: ResumeLayoutError) -> HTTPException:
     """Return a safe, actionable PDF failure without losing the session.
 
-    Tectonic output may contain rendered resume text, so detailed compiler
-    output remains in server diagnostics. The browser receives the actual
-    failure category and next action instead of a blank 500 response.
+    The browser receives the actual PDF layout failure category and next action
+    instead of a blank 500 response.
     """
     return HTTPException(
         status_code=409,
         detail=(
-            "PDF preview generation failed: the server's LaTeX renderer could "
-            "not compile the generated resume layout. Your uploaded resume, "
-            "job description, and session are saved. This is not a Gemini "
-            f"capacity error. Renderer detail: {exc}"
+            "PDF preview generation failed: the server could not fit the "
+            "generated resume into the required page layout. Your uploaded "
+            "resume, job description, and session are saved. This is not a "
+            f"Gemini capacity error. Layout detail: {exc}"
         ),
     )
 
