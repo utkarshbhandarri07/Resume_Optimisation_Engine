@@ -30,9 +30,19 @@
       let data = {};
       try { data = body ? JSON.parse(body) : {}; } catch { data = {detail: body}; }
       const wait = response.headers.get("Retry-After") || data.retry_after;
-      const fallback = response.status === 504
-        ? "The optimization took longer than expected. Your uploaded resume and job description are preserved; wait a moment and refresh the session before trying again."
-        : "Request failed.";
+      const fallback = {
+        400: "The request is invalid. Check the uploaded resume, job description, and selected model.",
+        401: "Your sign-in session has expired. Log in again, then reopen your saved session.",
+        403: "You do not have permission to access this session.",
+        404: "The requested session was not found. Start a new session only if you no longer need the saved one.",
+        409: "The request conflicts with the current session state. Your uploaded resume and job description are preserved.",
+        413: "The uploaded resume is larger than the supported file-size limit.",
+        429: "Too many requests were sent in a short time.",
+        500: "The server encountered an unexpected error before it could provide more detail. Your session data is preserved.",
+        502: "The resume-processing service could not continue the session. Your uploaded resume and job description are preserved.",
+        503: "The requested service is temporarily unavailable. If this is a Gemini model issue, choose a model in the retry dialog.",
+        504: "The optimization took longer than expected. Your uploaded resume and job description are preserved; wait a moment and refresh the session before trying again.",
+      }[response.status] || `The request failed with HTTP ${response.status}.`;
       const detail = typeof data.detail === "string" && data.detail.trim()
         ? data.detail
         : (data.detail?.message || fallback);

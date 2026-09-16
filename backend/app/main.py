@@ -54,6 +54,24 @@ def startup():
     global oracle_pool; oracle_pool=get_pool(); logger.info("application_started oracle_configured=%s", bool(oracle_pool))
 def public(item):
     state=dict(item["state"]); state.pop("original_resume",None); state["session_id"]=item.get("id"); return state
+
+def pdf_rendering_error(exc: ResumeLayoutError) -> HTTPException:
+    """Return a safe, actionable PDF failure without losing the session.
+
+    Tectonic output may contain rendered resume text, so detailed compiler
+    output remains in server diagnostics. The browser receives the actual
+    failure category and next action instead of a blank 500 response.
+    """
+    return HTTPException(
+        status_code=409,
+        detail=(
+            "PDF preview generation failed: the server's LaTeX renderer could "
+            "not compile the generated resume layout. Your uploaded resume, "
+            "job description, and session are saved. This is not a Gemini "
+            f"capacity error. Renderer detail: {exc}"
+        ),
+    )
+
 @app.get("/api/health/live")
 def live(): return {"status":"ok"}
 @app.get("/api/health/ready")
@@ -105,7 +123,11 @@ def decision(sid:str,payload:ReviewRequest,user:str=Depends(current_user),gemini
         raise HTTPException(502,f"Session could not continue: {exc}")
     save_session(sid,result); item=get_session(sid,user)
     if item["state"].get("download_ready") and not item.get("pdf"):
-        save_pdf(sid, build_resume_pdf(item["state"]["resume_template_data"], item["state"]["target_page_count"]))
+        try:
+            save_pdf(sid, build_resume_pdf(item["state"]["resume_template_data"], item["state"]["target_page_count"]))
+        except ResumeLayoutError as exc:
+            logger.warning("session_pdf_preview_failed session_id=%s action=%s error=%s", sid, payload.action, exc)
+            raise pdf_rendering_error(exc)
     return public(item)
 @app.get("/api/sessions/{sid}/download")
 def download(sid:str,user:str=Depends(current_user)):
@@ -113,5 +135,7 @@ def download(sid:str,user:str=Depends(current_user)):
     if not item or not item["state"].get("download_ready"): raise HTTPException(409,"Resume is not ready for download")
     if not item.get("pdf"):
         try: save_pdf(sid, build_resume_pdf(item["state"]["resume_template_data"], item["state"]["target_page_count"]))
-        except ResumeLayoutError as exc: raise HTTPException(409, str(exc))
+        except ResumeLayoutError as exc:
+            logger.warning("session_pdf_download_failed session_id=%s error=%s", sid, exc)
+            raise pdf_rendering_error(exc)
     return StreamingResponse(BytesIO(item["pdf"]),media_type="application/pdf",headers={"Content-Disposition":"attachment; filename=optimized-resume.pdf"})
